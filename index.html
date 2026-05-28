@@ -24,10 +24,10 @@ body{background:var(--bg);color:var(--text);font-family:'Montserrat',sans-serif;
 .hdr-text{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
 .hdr h1{font-size:22px;font-weight:800;letter-spacing:1px;color:var(--primary);line-height:1.2;text-transform:uppercase}
 .hdr h2{font-size:11px;font-weight:600;color:var(--primary);letter-spacing:3px;text-transform:uppercase;opacity:0.75}
-.kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
 .kpi{background:var(--surface);padding:18px 24px;position:relative;overflow:hidden}
 .kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.kpi.rv::after{background:var(--primary)}.kpi.to::after{background:var(--gold)}.kpi.tb::after{background:var(--accent)}
+.kpi.rv::after{background:var(--primary)}.kpi.to::after{background:var(--gold)}.kpi.tb::after{background:var(--accent)}.kpi.pr::after{background:var(--gold)}
 .kpi-lbl{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
 .kpi-val{font-size:40px;font-weight:800;line-height:1;transition:opacity .2s}
 .kpi.rv .kpi-val{color:var(--primary)}.kpi.to .kpi-val{color:var(--gold)}.kpi.tb .kpi-val{color:var(--primary)}
@@ -79,7 +79,7 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--surface2)}
 ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--primary)}
 @media(max-width:700px){
-  .kpi-strip{grid-template-columns:1fr}
+  .kpi-strip{grid-template-columns:1fr 1fr}
   .kpi{padding:12px 16px}
   .kpi-val{font-size:28px}
   .grid{grid-template-columns:1fr;padding:10px;gap:10px}
@@ -136,6 +136,7 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
     <div class="kpi rv"><div class="kpi-lbl">Registered Voters</div><div class="kpi-val" id="k-rv">&#8212;</div><div class="kpi-note" id="k-rv-note">County-wide electorate</div></div>
     <div class="kpi to"><div class="kpi-lbl">Turnout</div><div class="kpi-val" id="k-to">&#8212;</div><div class="kpi-note" id="k-to-note">Across filtered precincts</div></div>
     <div class="kpi tb"><div class="kpi-lbl">Total Ballots Cast</div><div class="kpi-val" id="k-tb">&#8212;</div><div class="kpi-note" id="k-tb-note">All ballot types</div></div>
+    <div class="kpi pr"><div class="kpi-lbl">Precincts Reporting</div><div class="kpi-val" id="k-pct" style="color:var(--gold)">&#8212;</div><div class="kpi-note" id="k-pct-note">of total precincts</div></div>
   </div>
   <div class="filters">
     <div class="fg"><label>Vote Type</label><select id="f-bt"><option value="">Total Votes</option><option value="ed">Election Day</option><option value="mi">Mail-In</option><option value="pr">Provisional</option></select></div>
@@ -367,6 +368,11 @@ function render(bt){
 
 function renderKPIs(bt){
   ['k-rv','k-to','k-tb'].forEach(id=>document.getElementById(id).classList.add('fade'));
+  // Precincts reporting = unique precincts with Election Day ballots > 0 (county-wide always)
+  const totalPcts=Object.keys(PCT_SUMMARY).length;
+  const reportingPcts=new Set(ALL.filter(r=>r[F.edb]>0).map(r=>r[F.p])).size;
+  document.getElementById('k-pct').textContent=reportingPcts.toLocaleString();
+  document.getElementById('k-pct-note').textContent='of '+totalPcts.toLocaleString()+' total precincts';
   setTimeout(()=>{
     const filtPcts=new Set(FILTERED.map(r=>r[F.p]));
     let totalRv=0,bNum=0;
@@ -455,8 +461,9 @@ function renderRaceChart(contestTitle,bt){
     const w=Math.max((item.votes/maxV*100),0.5).toFixed(1);
     const share=totalV>0?((item.votes/totalV)*100).toFixed(1)+'%':'0%';
     const bc=item.party==='DEM'?'dem':item.party==='REP'?'rep':'oth';
-    const wb=i===0&&item.party!=='WRI'?'<span class="race-winner-badge">&#9733; WINNER</span>':'';
-    return'<div class="race-bar-row"><div class="race-bar-meta"><span class="race-bar-name">'+item.name+wb+'</span><span style="display:flex;align-items:center;gap:12px;"><span class="race-bar-pct">'+share+'</span><span class="race-bar-votes">'+item.votes.toLocaleString()+' votes</span></span></div><div class="race-bar-track"><div class="race-bar-fill '+bc+'" style="width:'+w+'%"><span class="race-bar-label">'+item.name+'</span></div></div></div>';
+    const wb=''; // Winner badge removed — uncomment below when county declares winner
+    // const wb=i===0&&item.party!=='WRI'?'<span class="race-winner-badge">&#9733; WINNER</span>':'';
+    return'<div class="race-bar-row"><div class="race-bar-meta"><span style="display:flex;align-items:center;gap:12px;margin-left:auto;"><span class="race-bar-pct">'+share+'</span><span class="race-bar-votes">'+item.votes.toLocaleString()+' votes</span></span></div><div class="race-bar-track"><div class="race-bar-fill '+bc+'" style="width:'+w+'%"><span class="race-bar-label">'+item.name+'</span></div></div></div>';
   }).join('');
 }
 
