@@ -463,7 +463,7 @@ function renderRaceChart(contestTitle,bt){
     const bc=item.party==='DEM'?'dem':item.party==='REP'?'rep':'oth';
     const wb=''; // Winner badge removed — uncomment below when county declares winner
     // const wb=i===0&&item.party!=='WRI'?'<span class="race-winner-badge">&#9733; WINNER</span>':'';
-    return'<div class="race-bar-row"><div class="race-bar-meta"><span style="display:flex;align-items:center;gap:12px;margin-left:auto;"><span class="race-bar-pct">'+share+'</span><span class="race-bar-votes">'+item.votes.toLocaleString()+' votes</span></span></div><div class="race-bar-track"><div class="race-bar-fill '+bc+'" style="width:'+w+'%"><span class="race-bar-label">'+item.name+'</span></div></div></div>';
+    return'<div class="race-bar-row"><div class="race-bar-meta"><span class="race-bar-name">'+item.name+wb+'</span><span style="display:flex;align-items:center;gap:12px;"><span class="race-bar-pct">'+share+'</span><span class="race-bar-votes">'+item.votes.toLocaleString()+' votes</span></span></div><div class="race-bar-track"><div class="race-bar-fill '+bc+'" style="width:'+w+'%"></div></div></div>';
   }).join('');
 }
 
