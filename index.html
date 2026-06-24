@@ -192,7 +192,7 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
 const SERVICE_URL='https://services1.arcgis.com/kOChldNuKsox8qZD/arcgis/rest/services/Montgomery_County_GE_2026_Election_Results/FeatureServer/0';
 const GEOJSON_URL='https://gis.montcopa.org/arcgis/rest/services/Voters/Montgomery_County_Voting_Districts/FeatureServer/1/query?outFields=Precinct_Name,Municipality&where=1%3D1&f=geojson&resultRecordCount=500';
 const MUNI_URL=GEOJSON_URL;
-const DEFAULT_CONTEST='United States Senator';
+const DEFAULT_CONTEST='Governor and Lieutenant Governor';
 const REFRESH_INTERVAL=5*60*1000; // 5 minutes
 
 // Field name map: AGOL field → internal short name
@@ -630,6 +630,22 @@ function loadMap(){
   s.onload=()=>{
     map=L.map('map').setView([40.18,-75.37],11);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; CARTO',maxZoom:19}).addTo(map);
+
+    // Home button — resets view to full county and clears precinct/municipality filters' map effect
+    const homeControl=L.control({position:'topleft'});
+    homeControl.onAdd=function(){
+      const btn=L.DomUtil.create('button');
+      btn.innerHTML='&#8962;';
+      btn.title='Reset map to full county view';
+      btn.style.cssText='width:30px;height:30px;background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:4px;cursor:pointer;font-size:16px;line-height:1;color:#03425c;display:flex;align-items:center;justify-content:center;';
+      L.DomEvent.disableClickPropagation(btn);
+      btn.onclick=function(){
+        if(geojsonLayer) map.fitBounds(geojsonLayer.getBounds().pad(0.02));
+        else map.setView([40.18,-75.37],11);
+      };
+      return btn;
+    };
+    homeControl.addTo(map);
     fetch(GEOJSON_URL)
       .then(r=>{if(!r.ok) throw new Error('HTTP '+r.status);return r.json();})
       .then(data=>{
