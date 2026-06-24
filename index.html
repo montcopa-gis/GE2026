@@ -86,7 +86,25 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
 .legend-swatch{width:14px;height:14px;border-radius:2px;flex-shrink:0}
 .leaflet-tooltip{font-family:'Montserrat',sans-serif;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:6px 10px}
 #update-bar{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--gold);color:var(--primary);font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:10px 24px;align-items:center;justify-content:center;gap:12px}
+.close-race-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.close-race-row:last-child{border-bottom:none}
+.close-race-row:hover{background:var(--surface2)}
+.close-race-contest{font-size:12px;font-weight:600;color:var(--primary);flex:1}
+.close-race-detail{font-size:11px;color:var(--muted);margin-top:2px}
+.close-race-margin{font-size:16px;font-weight:800;color:var(--gold);white-space:nowrap;margin-left:16px}
+@media print{
+  .filters,.last-updated,#update-bar,#toggle-btn,.btn-reset,.refresh-btn,#map-view,.map-legend{display:none!important}
+  body{background:#fff}
+  .panel{break-inside:avoid;border:1px solid #999}
+  .hdr{background:#fff!important;border-bottom:2px solid #03425c}
+  .kpi-strip{break-inside:avoid}
+  .tbl-wrap{max-height:none;overflow:visible}
+  th{position:static}
+}
 @media(max-width:700px){
+  .close-race-margin{font-size:14px}
+  .last-updated{flex-direction:column;align-items:flex-start;gap:6px}
+}
   .kpi-strip{grid-template-columns:1fr 1fr}.kpi{padding:12px 16px}.kpi-val{font-size:28px}
   .grid{grid-template-columns:1fr;padding:10px;gap:10px}.panel.wide{grid-column:1}
   .hdr{grid-template-columns:auto 1fr;padding:14px 16px;gap:12px}.hdr-logo{height:56px}
@@ -122,8 +140,12 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
     <div class="kpi pr"><div class="kpi-lbl">Precincts Reporting</div><div class="kpi-val" id="k-pct">&#8212;</div><div class="kpi-note" id="k-pct-note">of total precincts</div></div>
   </div>
   <div class="last-updated">
-    <span>Last updated: <strong id="last-updated-time">&#8212;</strong> &nbsp;&bull;&nbsp; Auto-refreshes every 5 minutes</span>
-    <button class="refresh-btn" onclick="refreshData()">&#8635; Refresh Now</button>
+    <span><span id="conn-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecc71;margin-right:6px;vertical-align:middle;"></span>Last updated: <strong id="last-updated-time">&#8212;</strong> &nbsp;&bull;&nbsp; Auto-refreshes every 5 minutes &nbsp;&bull;&nbsp; <a href="#" id="open-data-link" target="_blank" style="color:var(--primary);text-decoration:underline;">Download Raw Data (CSV)</a></span>
+    <span style="display:flex;gap:8px;">
+      <button class="refresh-btn" onclick="copyShareLink()" id="share-btn">&#128279; Copy Link</button>
+      <button class="refresh-btn" onclick="exportCSV()">&#11015; Export View</button>
+      <button class="refresh-btn" onclick="refreshData()">&#8635; Refresh Now</button>
+    </span>
   </div>
   <div class="filters">
     <div class="fg"><label>Vote Type</label><select id="f-bt"><option value="">Total Votes</option><option value="ed">Election Day</option><option value="mi">Mail-In</option><option value="pr">Provisional</option></select></div>
@@ -134,6 +156,10 @@ tr:hover td{background:var(--surface2);color:var(--primary)}
     <button class="btn-reset" onclick="resetFilters()">&circlearrowleft; Reset All</button>
   </div>
   <div class="grid">
+    <div class="panel wide" id="closest-races-panel">
+      <div class="ph"><span class="ph-title">Closest Races County-Wide</span><span class="ph-sub" id="closest-sub">Top margins</span></div>
+      <div class="bar-list" id="closest-chart" style="max-height:none;"></div>
+    </div>
     <div class="panel wide">
       <div class="ph" style="gap:16px;flex-wrap:wrap;">
         <span id="panel-title" class="ph-title">Race Results</span>
@@ -194,6 +220,8 @@ const GEOJSON_URL='https://gis.montcopa.org/arcgis/rest/services/Voters/Montgome
 const MUNI_URL=GEOJSON_URL;
 const DEFAULT_CONTEST='Governor and Lieutenant Governor';
 const REFRESH_INTERVAL=5*60*1000; // 5 minutes
+// TODO: update this to the live Open Data Portal item URL once published
+const OPEN_DATA_URL='https://gis.montcopa.org/opendata/';
 
 // Field name map: AGOL field → internal short name
 const FIELD_MAP={
@@ -346,7 +374,10 @@ async function init(){
     document.getElementById('f-contest').value=DEFAULT_CONTEST;
     updateRaceLabels();
     renderRaceChart(DEFAULT_CONTEST,'');
+    renderClosestRaces();
     document.getElementById('last-updated-time').textContent=new Date().toLocaleTimeString();
+    document.getElementById('open-data-link').href=OPEN_DATA_URL;
+    applyFiltersFromURL();
     document.getElementById('loading').style.display='none';
     document.getElementById('app').style.display='block';
     setTimeout(loadMap,500);
@@ -355,13 +386,22 @@ async function init(){
   }catch(e){
     document.getElementById('ld-err').textContent='Error loading data: '+e.message;
     document.getElementById('ld-msg').textContent='LOAD FAILED';
+    setConnStatus(false);
     console.error(e);
   }
+}
+
+function setConnStatus(ok){
+  const dot=document.getElementById('conn-dot');
+  if(!dot) return;
+  dot.style.background=ok?'#2ecc71':'#E81B23';
+  dot.title=ok?'Live — connected':'Connection issue — showing last known data';
 }
 
 async function refreshData(){
   try{
     const changed=await loadData(true);
+    setConnStatus(true);
     if(changed){
       const pv=document.getElementById('f-pct').value;
       const mv=document.getElementById('f-muni').value;
@@ -378,6 +418,7 @@ async function refreshData(){
       });
       render(bt);
       renderRaceChart(cv||DEFAULT_CONTEST, bt);
+      renderClosestRaces();
       document.getElementById('last-updated-time').textContent=new Date().toLocaleTimeString();
       // Flash the update bar briefly
       const bar=document.getElementById('update-bar');
@@ -387,6 +428,7 @@ async function refreshData(){
       console.log('Data refreshed at',new Date().toLocaleTimeString());
     }
   }catch(e){
+    setConnStatus(false);
     console.warn('Refresh failed:',e);
   }
 }
@@ -483,6 +525,7 @@ function resetFilters(){
 function render(bt){
   renderKPIs(bt); renderCharts(bt); renderTable();
   renderRaceChart(document.getElementById('f-contest').value, bt);
+  renderClosestRaces();
   drawMap();
 }
 
@@ -584,7 +627,118 @@ function renderRaceChart(contestTitle,bt){
   }).join('');
 }
 
-function sortBy(col){
+function renderClosestRaces(){
+  const el=document.getElementById('closest-chart');
+  const bt=document.getElementById('f-bt').value;
+  const btF=bt==='ed'?F.edv:bt==='mi'?F.miv:bt==='pr'?F.prv:F.tv;
+  // Use county-wide ALL data (not FILTERED) so this is always county-wide context
+  const byContest={};
+  ALL.forEach(r=>{
+    const ct=r[F.ct];
+    if(!byContest[ct]) byContest[ct]={};
+    if(!byContest[ct][r[F.cn]]) byContest[ct][r[F.cn]]={votes:0,party:r[F.pc]};
+    byContest[ct][r[F.cn]].votes+=r[btF];
+  });
+  const margins=[];
+  Object.entries(byContest).forEach(([ct,cands])=>{
+    const sorted=Object.entries(cands).sort((a,b)=>b[1].votes-a[1].votes);
+    if(sorted.length<2) return;
+    const total=sorted.reduce((s,[,v])=>s+v.votes,0);
+    if(total===0) return;
+    const margin=sorted[0][1].votes-sorted[1][1].votes;
+    const marginPct=(margin/total*100);
+    margins.push({
+      contest:ct, leader:sorted[0][0], leaderVotes:sorted[0][1].votes,
+      runnerUp:sorted[1][0], runnerUpVotes:sorted[1][1].votes,
+      margin, marginPct
+    });
+  });
+  margins.sort((a,b)=>a.marginPct-b.marginPct);
+  const top=margins.slice(0,5);
+  if(!top.length){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">No contests with reported results yet.</div>';return;}
+  el.innerHTML=top.map(m=>{
+    return '<div class="close-race-row" onclick="jumpToContest(\''+m.contest.replace(/'/g,"\\'")+'\')">'+
+      '<div><div class="close-race-contest">'+m.contest+'</div>'+
+      '<div class="close-race-detail">'+m.leader+' ('+m.leaderVotes.toLocaleString()+') vs '+m.runnerUp+' ('+m.runnerUpVotes.toLocaleString()+')</div></div>'+
+      '<div class="close-race-margin">'+m.marginPct.toFixed(1)+'%<br><span style="font-size:10px;font-weight:600;color:var(--muted);">margin</span></div>'+
+    '</div>';
+  }).join('');
+}
+
+function jumpToContest(contestTitle){
+  document.getElementById('f-contest').value=contestTitle;
+  document.getElementById('f-contest').dispatchEvent(new Event('change'));
+  document.getElementById('panel-title').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── SHARE LINK ───────────────────────────────────────────────────
+function copyShareLink(){
+  const params=new URLSearchParams();
+  const bt=document.getElementById('f-bt').value;
+  const mv=document.getElementById('f-muni').value;
+  const pv=document.getElementById('f-pct').value;
+  const cv=document.getElementById('f-contest').value;
+  const cnv=document.getElementById('f-cand').value;
+  if(bt) params.set('vt',bt);
+  if(mv) params.set('muni',mv);
+  if(pv) params.set('pct',pv);
+  if(cv) params.set('contest',cv);
+  if(cnv) params.set('cand',cnv);
+  const url=window.location.origin+window.location.pathname+(params.toString()?'?'+params.toString():'');
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn=document.getElementById('share-btn');
+    const orig=btn.textContent;
+    btn.textContent='&#10003; Copied!';
+    setTimeout(()=>btn.innerHTML='&#128279; Copy Link',1800);
+  }).catch(()=>{
+    prompt('Copy this link:', url);
+  });
+}
+
+function applyFiltersFromURL(){
+  const params=new URLSearchParams(window.location.search);
+  const map={vt:'f-bt',muni:'f-muni',pct:'f-pct',contest:'f-contest',cand:'f-cand'};
+  let any=false;
+  Object.entries(map).forEach(([param,id])=>{
+    const val=params.get(param);
+    if(val){
+      const el=document.getElementById(id);
+      if(el && [...el.options].some(o=>o.value===val)){ el.value=val; any=true; }
+    }
+  });
+  if(any){
+    // Trigger cascades in order: municipality first, then contest
+    if(params.get('muni')) document.getElementById('f-muni').dispatchEvent(new Event('change'));
+    if(params.get('contest')) document.getElementById('f-contest').dispatchEvent(new Event('change'));
+    applyFilters();
+  }
+}
+
+// ── EXPORT CSV ───────────────────────────────────────────────────
+function exportCSV(){
+  const headers=['Precinct','Contest','Candidate','Registered Voters','Turnout','Ballots Cast','Total Votes','Election Day Votes','Mail-In Votes','Provisional Votes'];
+  const rows=FILTERED.map(r=>[
+    r[F.p], r[F.ct], r[F.cn], r[F.rv], (r[F.to]*100).toFixed(1)+'%',
+    r[F.tb], r[F.tv], r[F.edv], r[F.miv], r[F.prv]
+  ]);
+  const csvContent=[headers, ...rows].map(row=>
+    row.map(cell=>{
+      const s=String(cell);
+      return s.includes(',')||s.includes('"')?'"'+s.replace(/"/g,'""')+'"':s;
+    }).join(',')
+  ).join('\n');
+  const blob=new Blob([csvContent],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='montco_election_results_'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
   sortDir=(sortCol===col)?sortDir*-1:-1; sortCol=col;
   document.querySelectorAll('th').forEach(th=>th.classList.remove('sorted'));
   document.querySelectorAll('[id^="sa-"]').forEach(el=>el.textContent='');
